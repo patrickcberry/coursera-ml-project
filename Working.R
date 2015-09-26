@@ -1,11 +1,12 @@
 # Clean up environment
 
 rm(list=ls())
+setwd("C:/Users/patrick.berry/Desktop/Coursera/Machine Learning/coursera-ml-project")
 
 # Load the data sets
 
-raw_train <- read.csv("../project-data/pml-training.csv")
-raw_test <- read.csv("../project-data/pml-testing.csv")
+raw_train <- read.csv("../project-data/pml-training.csv",na.strings=c("NA","NaN","#DIV/0!", ""))
+raw_test <- read.csv("../project-data/pml-testing.csv",na.strings=c("NA","NaN","#DIV/0!", ""))
 
 
 # #####################################################
@@ -38,7 +39,7 @@ str(raw_train$classe)
 raw_test$X
 
 # #####################################################
-# Create data sets
+# Data Partitioning
 #
 # training 60%
 # testing 20%
@@ -56,13 +57,13 @@ inVal <- createDataPartition( testAndValidation$classe, p = 0.5, list = FALSE )
 validation <- testAndValidation[ inVal, ]
 testing <- testAndValidation[ -inVal, ]
 
-rm(list=c("inTrain", "inVal", "test", "testAndValidation", "raw_train"))
+rm(list=c("inTrain", "inVal", "testAndValidation", "raw_train"))
 
 # #####################################################
 # Preprocessing
 
 # Removing unnecessary varaibles
-rem <- grepl("^X|user|timestamp|window", names(training))str
+rem <- grepl("^X|user|timestamp|window", names(training))
 training <- training[, !rem]
 
 # Too many covariates at 160
@@ -70,6 +71,8 @@ training <- training[, !rem]
 
 nzv <- nearZeroVar( training )
 training <- training[,-nzv]
+
+rm(list=c("rem","nzv"))
 
 # Remove covariates with high number of missing values (greater than 50%)
 
@@ -83,43 +86,82 @@ training <- training[, colSums(is.na(training)) < 0.5 * nrow(training)]
 #
 # Tree or Random forest would be most appropiate
 
-controlCV <- trainControl(method="cv")
+# RANDOM FORREST
+
+
+
+ctrl <- trainControl(method="cv",
+                     repeats = 1,
+                     number = 5,
+                     verboseIter = TRUE )
 
 modFitRF <- train( training$classe ~ .,
                    data = training,
                    method = "rf",
-                   trControl=controlCV )
+                   trControl=ctrl )
 
+# In sample error
+predRF <- predict( modFitRF, newdata = training)
+inSampleErrorRF <- sum(predRF != training$classe) / nrow(training)
 
+# Out of sample error
+predOOSRF <- predict( modFitRF, newdata = testing)
+outSampleErrorRF <- sum(predOOSRF != testing$classe) / nrow(testing) * 100
 
+# TREE RPART
 
-modFitRF <- train( training$classe ~ .,
+modFitRP <- train( training$classe ~ .,
                    data = training,
-                   preProcess = "knnImpute", 
-                   na.action = na.pass,
-                   method = "rf",
-                   trControl=controlCV )
+                   method = "rpart",
+                   trControl=ctrl )
 
+# In sample error
+predRP <- predict( modFitRP, newdata = training)
+inSampleErrorRP <- sum(predRP != training$classe) / nrow(training)
 
+# Out of sample error
+predOOSRP <- predict( modFitRP, newdata = testing)
+outSampleErrorRP <- sum(predOOSRP != testing$classe) / nrow(testing) * 100
 
-# Linear Models
+# BOOSTING
+# - Crashed system
+
+modFitGBM <- train( training$classe ~ .,
+                   data = training,
+                   method = "lda",
+                   trControl=ctrl )
+
+# In sample error
+predGBM <- predict( modFitGBM, newdata = training)
+inSampleErrorGBM <- sum(predGBM != training$classe) / nrow(training)
+
+# Out of sample error
+predOOSGBM <- predict( modFitGBM, newdata = testing)
+outSampleErrorGBM <- sum(predOOSGBM != testing$classe) / nrow(testing) * 100
+
+# ######################################################
+# ModelFit
 #
-# GLM + PCA
+
+confusionMatrix(predOOSRF,testing$classe)
+varImp( modFitRF )
+
+# ######################################################
+# Create submission files
 #
 
-modFitGLM <- train( training$classe ~ ., 
-                    method = "glm", 
-                    preProcess = c("center","scale","knnImpute", "pca"), 
-                    na.action = na.pass,
-                    data = training )
+# Create submission vector
 
+answers <- as.character(predict( modFitRF, raw_test ))
 
+pml_write_files = function(x){
+    n = length(x)
+    for(i in 1:n){
+        filename = paste0("problem_id_",i,".txt")
+        write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+    }
+}
 
-
-
-
-
-
-
+pml_write_files(answers)
 
 

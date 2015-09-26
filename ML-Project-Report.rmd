@@ -1,19 +1,178 @@
 ---
 title: "Machine Learning - Project"
 author: "Patrick Berry"
-date: "September 27, 2015"
+date: "September 26, 2015"
 output: html_document
 ---
 
 #Overview
 
+Data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants will be analysed. The participants performed barbell lifts correctly and incorrectly in 5 different ways. This project aims to build a model to predict if the barbell lift is performed correctly from the available accelerometer data.
+
+#Data Loading
+
+The data is provided as CSV files and is loaded from the local hard drive,
+
+```{r cache=TRUE}
+raw_train <- read.csv("../project-data/pml-training.csv",na.strings=c("NA","NaN","#DIV/0!", ""))
+raw_test <- read.csv("../project-data/pml-testing.csv",na.strings=c("NA","NaN","#DIV/0!", ""))
+```
+
+#Data Partitioning
+
+The data is partitioned into three data set,
+
++ Training (60%)
++ Testing (20%)
++ Validation (20%)
+
+```{r cache=TRUE, warning=FALSE}
+library(caret)
+
+set.seed(1234567)
+inTrain <- createDataPartition( raw_train$classe, p = 0.6, list = FALSE )
+
+training <- raw_train[ inTrain, ]
+testAndValidation <- raw_train[ -inTrain, ]
+
+inVal <- createDataPartition( testAndValidation$classe, p = 0.5, list = FALSE )
+validation <- testAndValidation[ inVal, ]
+testing <- testAndValidation[ -inVal, ]
+```
+
 #Exploratory Analysis
+
+The data set,
+
++ Contain 160 variables
++ Contains may factor variables
++ Contains many variables with NAs
+
+```{r}
+str(raw_train)
+```
+
+Variable to predict is the 'classe' variable which is a factor variable with 5 levels A ... E.
+
+```{r}
+str(raw_train$classe)
+```
+
+The training data-set contains 19622 observations,
+```{r}
+nrow(raw_train)
+```
+
+#Data Preprocessing
+The data is preprocessed to remove,
+
++ Irrelevant variables (i.e. user, time-stamp etc.)
++ Near zero covariates
++ Covariates with a high number of missing values
+
+```{r cache=TRUE}
+library(caret)
+
+# Removing unnecessary varaibles
+rem <- grepl("^X|user|timestamp|window", names(training))
+training <- training[, !rem]
+
+# Remove near zero covariates
+nzv <- nearZeroVar( training )
+training <- training[,-nzv]
+
+# Remove covariates with high number of missing values (greater than 50%)
+training <- training[, colSums(is.na(training)) < 0.5 * nrow(training)]
+```
 
 #Model Creation
 
+Since the outcome variable is a factor cannot use a linear model (unless the outcome is converted to a continuous variable)
+
+Tree or Random forest would be most appropriate model.
+
+The following models where fitted to the data,
+
++ Rpart tree (rpart)
++ Random forest (rt)
++ Generalized Boosted Regression Model (gbm)
++ Adaptive Boost (ada)
++ Linear Discriminate Analysis (lda)
+
+Note: the generation of these models has non been included in this report due to the computation time to fit the model to the large training set.
+
 #Model Selection
+
+A number of model where generated and the in and out of sample error calculated (using the training and testing data sets).
+
+The Random Forest was the best performing model.
+
+```{r cache=TRUE, warning=FALSE, message=FALSE}
+ctrl <- trainControl(method="cv",
+                     repeats = 1,
+                     number = 5 )
+
+modFitRF <- train( training$classe ~ .,
+                   data = training,
+                   method = "rf",
+                   trControl=ctrl )
+
+# In sample error
+predRF <- predict( modFitRF, newdata = training)
+inSampleErrorRF <- sum(predRF != training$classe) / nrow(training)
+
+# Out of sample error
+predOOSRF <- predict( modFitRF, newdata = testing)
+outSampleErrorRF <- sum(predOOSRF != testing$classe) / nrow(testing) * 100
+```
 
 #Cross Validation
 
-#Sample Error
+For the selected model (Random Forest) the in sample error and out of sample error (against the testing set) are (%),
+```{r chache=TRUE, warning=FALSE}
+print(c(inSampleErrorRF, outSampleErrorRF))
+```
+
+Test the error against the validation set is (%),
+```{r chache=TRUE, warning=FALSE, message=FALSE}
+pVal <- predict( modFitRF, newdata = validation)
+eVal <- sum(pVal != validation$classe) / nrow(validation) * 100
+eVal
+```
+
+As expected the error against the validation set is slightly higher than then testing set as we used the testing data set to select out model.
+
+#Model Fit
+
+Below we calculate various accuracy metrics for the model and see that it performs very well with an accuracy of 99%. One two observations where misclassified.
+```{r chache=TRUE, warning=FALSE, message=FALSE}
+library(caret)
+confusionMatrix(predOOSRF,testing$classe)
+```
+
+Below we can see the 20 most significant co-variants in the model,
+```{r chache=TRUE, warning=FALSE, message=FALSE}
+varImp( modFitRF )
+```
+The list above indicates that the model could possibly be simplified somewhat without sacrificing too much accuracy.
+
+#Generating the submission dataset
+
+Below predictions are generated for the final submission,
+
+```{r chache=TRUE, warning=FALSE, message=FALSE}
+answers <- as.character(predict( modFitRF, raw_test ))
+
+pml_write_files = function(x){
+    n = length(x)
+    for(i in 1:n){
+        filename = paste0("problem_id_",i,".txt")
+        write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+    }
+}
+
+pml_write_files(answers)
+```
+
+
 
