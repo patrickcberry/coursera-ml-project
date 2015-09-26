@@ -1,0 +1,19 @@
+---
+title: "Machine Learning - Project"
+author: "Patrick Berry"
+date: "September 27, 2015"
+output: html_document
+---
+
+#Overview
+
+#Exploratory Analysis
+
+#Model Creation
+
+#Model Selection
+
+#Cross Validation
+
+#Sample Error
+
